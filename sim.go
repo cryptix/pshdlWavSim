@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
 
@@ -27,9 +28,58 @@ type WavSim struct {
 
 	doneWrite chan error
 	doneRead  chan error
+
+	iFile, oFile *os.File
 }
 
-func NewWavSim(input *wav.WavReader, output *wav.WavWriter) (w *WavSim, err error) {
+func NewWavSimFromFile(binPath string, coeffs []int, inputFname, outputFname string) (w *WavSim, err error) {
+	// open input file
+	inputFile, err := os.Open(inputFname)
+	if err != nil {
+		return nil, err
+	}
+
+	// get stat for file Size
+	inputStat, err := inputFile.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	// create wav.Reader
+	input, err := wav.NewWavReader(inputFile, inputStat.Size())
+	if err != nil {
+		return nil, err
+	}
+
+	// create output file
+	outputFile, err := os.Create(outputFname)
+	if err != nil {
+		return nil, err
+	}
+
+	// get meta information from input
+	meta := input.GetWavFile()
+
+	// create output with the same characteristics
+	output, err := meta.NewWriter(outputFile)
+	if err != nil {
+		return nil, err
+	}
+
+	// create a WavSim based in these files
+	sim, err := NewWavSim(binPath, coeffs, input, output)
+	if err != nil {
+		return nil, err
+	}
+
+	// store file handles for closing after sim
+	sim.iFile = inputFile
+	sim.oFile = outputFile
+
+	return sim, nil
+}
+
+func NewWavSim(binPath string, coeffs []int, input *wav.WavReader, output *wav.WavWriter) (w *WavSim, err error) {
 	w = &WavSim{
 		input:  input,
 		output: output,
@@ -40,7 +90,13 @@ func NewWavSim(input *wav.WavReader, output *wav.WavWriter) (w *WavSim, err erro
 
 	w.samplesTotal = input.GetSampleCount()
 
-	w.cmd = exec.Command("./sim", strconv.Itoa(int(w.samplesTotal)))
+	// construct arguments
+	args := make([]string, len(coeffs)+1)
+	args[0] = strconv.Itoa(int(w.samplesTotal))
+	for i, c := range coeffs {
+		args[i+1] = strconv.Itoa(c)
+	}
+	w.cmd = exec.Command(binPath, args...)
 
 	w.stdin, err = w.cmd.StdinPipe()
 	if err != nil {
@@ -95,6 +151,14 @@ func (w WavSim) Run() (err error) {
 	err = w.output.CloseFile()
 	if err != nil {
 		return err
+	}
+
+	if w.iFile != nil {
+		w.iFile.Close()
+	}
+
+	if w.oFile != nil {
+		w.oFile.Close()
 	}
 
 	return nil
