@@ -32,7 +32,7 @@ type WavSim struct {
 	iFile, oFile *os.File
 }
 
-func NewWavSimFromFile(binPath string, coeffs []int, inputFname, outputFname string) (w *WavSim, err error) {
+func NewWavSimFromFile(binPath string, scaler int, coeffs []int, inputFname, outputFname string) (w *WavSim, err error) {
 	// open input file
 	inputFile, err := os.Open(inputFname)
 	if err != nil {
@@ -67,7 +67,7 @@ func NewWavSimFromFile(binPath string, coeffs []int, inputFname, outputFname str
 	}
 
 	// create a WavSim based in these files
-	sim, err := NewWavSim(binPath, coeffs, input, output)
+	sim, err := NewWavSim(binPath, scaler, coeffs, input, output)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func NewWavSimFromFile(binPath string, coeffs []int, inputFname, outputFname str
 	return sim, nil
 }
 
-func NewWavSim(binPath string, coeffs []int, input *wav.WavReader, output *wav.WavWriter) (w *WavSim, err error) {
+func NewWavSim(binPath string, scaler int, coeffs []int, input *wav.WavReader, output *wav.WavWriter) (w *WavSim, err error) {
 	w = &WavSim{
 		input:  input,
 		output: output,
@@ -91,10 +91,11 @@ func NewWavSim(binPath string, coeffs []int, input *wav.WavReader, output *wav.W
 	w.samplesTotal = input.GetSampleCount()
 
 	// construct arguments
-	args := make([]string, len(coeffs)+1)
+	args := make([]string, len(coeffs)+2)
 	args[0] = strconv.Itoa(int(w.samplesTotal))
+	args[1] = strconv.Itoa(scaler)
 	for i, c := range coeffs {
-		args[i+1] = strconv.Itoa(c)
+		args[i+2] = strconv.Itoa(c)
 	}
 	w.cmd = exec.Command(binPath, args...)
 
