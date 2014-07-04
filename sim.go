@@ -114,8 +114,6 @@ func NewWavSim(binPath string, scaler int, coeffs []int, input *wav.WavReader, o
 		return nil, err
 	}
 
-	go w.stderrLog()
-
 	return w, nil
 }
 
@@ -125,6 +123,8 @@ func (w WavSim) Run() (err error) {
 	if err != nil {
 		return err
 	}
+
+	go w.stderrLog()
 
 	go w.readPump()
 	go w.writePump()
