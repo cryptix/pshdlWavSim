@@ -9,62 +9,54 @@ import (
 	"github.com/cryptix/wav"
 )
 
-type Multi struct {
-	cmd *exec.Cmd
-
-	out          *wav.WavWriter
-	samplesTotal uint32
-
-	files []*os.File
-}
-
-func NewMultiFromFile(binPath string, inAfname, inBfname, outputFname string) (*Multi, error) {
+// NewMultiFromFile does the preperation and then calls NewMulti
+func NewMultiFromFile(binPath string, inAfname, inBfname, outputFname string) error {
 	// open first input file
 	fileA, err := os.Open(inAfname)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	statA, err := fileA.Stat()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	wavA, err := wav.NewWavReader(fileA, statA.Size())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	_, err = fileA.Seek(int64(wavA.FirstSampleOffset()), os.SEEK_SET)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// open 2nd input file
 	fileB, err := os.Open(inBfname)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	statB, err := fileB.Stat()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	wavB, err := wav.NewWavReader(fileB, statB.Size())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	_, err = fileB.Seek(int64(wavB.FirstSampleOffset()), os.SEEK_SET)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// create output file
 	outputFile, err := os.Create(outputFname)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// get meta information from input
@@ -73,54 +65,41 @@ func NewMultiFromFile(binPath string, inAfname, inBfname, outputFname string) (*
 	// create output with the same characteristics
 	output, err := meta.NewWriter(outputFile)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// create a MonoFIR based in these files
 	files := []*os.File{fileA, fileB, outputFile}
-	sim, err := NewMulti(binPath, int(wavA.GetSampleCount()), files, output)
-	if err != nil {
-		return nil, err
-	}
 
-	return sim, nil
+	return NewMulti(binPath, int(wavA.GetSampleCount()), files, output)
 }
 
-func NewMulti(binPath string, samplesTotal int, files []*os.File, output *wav.WavWriter) (*Multi, error) {
-	m := &Multi{
-		out: output,
+func NewMulti(binPath string, samplesTotal int, files []*os.File, output *wav.WavWriter) error {
+
+	cmd := exec.Command(binPath, strconv.Itoa(samplesTotal))
+	cmd.ExtraFiles = files
+
+	_, wPtr, err := output.GetDumbWriter()
+	if err != nil {
+		return fmt.Errorf("output.GetDumbWriter() Err:%q", err)
 	}
 
-	m.samplesTotal = uint32(samplesTotal)
+	cmtOut, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("cmd.CombinedOutput() Err:%q", err)
+	}
 
-	m.cmd = exec.Command(binPath, strconv.Itoa(samplesTotal))
-	m.cmd.ExtraFiles = files
+	if len(cmtOut) != 0 {
+		return fmt.Errorf("Error sim output: %q", string(cmtOut))
+	}
 
-	return m, nil
-}
-
-func (m Multi) Run() (err error) {
-	_, wPtr, err := m.out.GetDumbWriter()
+	*wPtr = int32(samplesTotal)
+	err = output.Close()
 	if err != nil {
 		return err
 	}
 
-	out, err := m.cmd.CombinedOutput()
-	if err != nil {
-		return err
-	}
-
-	if len(out) != 0 {
-		return fmt.Errorf("Error sim output: %q", string(out))
-	}
-
-	*wPtr = int32(m.samplesTotal)
-	err = m.out.Close()
-	if err != nil {
-		return err
-	}
-
-	for _, f := range m.files {
+	for _, f := range files[:1] { // dont close outputFile
 		if err := f.Close(); err != nil {
 			return err
 		}
