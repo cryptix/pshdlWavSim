@@ -1,6 +1,7 @@
 package pshdlWavSim
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +19,7 @@ type MonoFIR struct {
 
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
-	stderr io.ReadCloser
+	stderr bytes.Buffer
 
 	samplesTotal uint32
 
@@ -93,17 +94,13 @@ func NewMonoFIR(binPath string, scaler int, coeffs []int, input *wav.WavReader, 
 
 	w.cmd = exec.Command(binPath, args...)
 
+	w.cmd.Stderr = &w.stderr
 	w.stdin, err = w.cmd.StdinPipe()
 	if err != nil {
 		return nil, err
 	}
 
 	w.stdout, err = w.cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-
-	w.stderr, err = w.cmd.StderrPipe()
 	if err != nil {
 		return nil, err
 	}
@@ -130,23 +127,25 @@ func (w MonoFIR) Run() (err error) {
 
 	rc := make(chan copyJob)
 	wc := make(chan copyJob)
-
-	go stderrLog(w.stderr)
 	go copyPump(rc, in, w.stdin)
 	go copyPump(wc, w.stdout, nopCloseWriter{out})
 
 	wjob := <-wc
 	if wjob.Err != nil {
-		return wjob.Err
+		return fmt.Errorf("outCopy failed: %q", wjob.Err)
 	}
 
 	rjob := <-rc
 	if rjob.Err != nil {
-		return rjob.Err
+		return fmt.Errorf("inCopy failed: %q", rjob.Err)
 	}
 
 	if err = w.cmd.Wait(); err != nil {
 		return err
+	}
+
+	if s := w.stderr.String(); s != "" {
+		return fmt.Errorf("Stderr not empty: %q", s)
 	}
 
 	if wjob.N != rjob.N {

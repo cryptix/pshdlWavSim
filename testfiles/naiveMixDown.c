@@ -36,13 +36,13 @@ int main(int argc, char const *argv[])
     ret = read(3, inA.buf, bufSize);
     if (ret != bufSize) {
       fprintf(stderr, "Sim.Read Error\nn[%d] ret[%zd]\n",samplecount,ret);
-      break;
+      exit(1);
     }
 
     ret = read(4, inB.buf, bufSize);
     if (ret != bufSize) {
       fprintf(stderr, "Sim.Read Error\nn[%d] ret[%zd]\n",samplecount,ret);
-      break;
+      exit(1);
     }
 
     // do something with the sample...
@@ -52,10 +52,10 @@ int main(int argc, char const *argv[])
     ret = write(5,output.buf, bufSize);
     if(ret != bufSize) {
       fprintf(stderr, "Sim.Write Error\nn[%d] ret[%zd]\n",samplecount,ret);
-      break;
+      exit(1);
     }
   }
 
 
-  return 0;
+  exit(0);
 }

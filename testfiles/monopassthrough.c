@@ -24,9 +24,8 @@ int main(int argc, char const *argv[])
     exit(1);
   }
 
-
   // our union buffers for easy casting between byte[] and long
-  union sample input, output;
+  union sample input;//, output;
   int samplecount = atoi(argv[1]);
 
 
@@ -36,20 +35,20 @@ int main(int argc, char const *argv[])
     ret = read(0, input.buf, bufSize);
     if (ret != bufSize) {
       fprintf(stderr, "Sim.Read Error\nn[%d] ret[%zd]\n",samplecount,ret);
-      break;
+      exit(1);
     }
 
     // do something with the sample...
-    output.number = input.number;
+    // output.number = input.number;
 
     // write it out to stdout
-    ret = write(1,output.buf, bufSize);
+    ret = write(1,input.buf, bufSize);
     if(ret != bufSize) {
       fprintf(stderr, "Sim.Write Error\nn[%d] ret[%zd]\n",samplecount,ret);
-      break;
+      exit(1);
     }
   }
 
 
-  return 0;
+  exit(0);
 }
