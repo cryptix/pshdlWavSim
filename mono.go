@@ -3,7 +3,6 @@ package pshdlWavSim
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -11,45 +10,30 @@ import (
 	"github.com/cryptix/wav"
 )
 
-type MonoFIR struct {
-	cmd *exec.Cmd
-
-	input  *wav.WavReader
-	output *wav.WavWriter
-
-	stdin  io.WriteCloser
-	stdout io.ReadCloser
-	stderr bytes.Buffer
-
-	samplesTotal uint32
-
-	bytesWritten, bytesRead int64
-	writtenSamplesPtr       *int32
-}
-
-func NewMonoFIRFromFile(binPath string, scaler int, coeffs []int, inputFname, outputFname string) (w *MonoFIR, err error) {
+func NewMonoFIRFromFile(binPath string, scaler int, coeffs []int, inputFname, outputFname string) error {
 	// open input file
+	// BUG(Henry): close this file after run
 	inputFile, err := os.Open(inputFname)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// get stat for file Size
 	inputStat, err := inputFile.Stat()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// create wav.Reader
 	input, err := wav.NewWavReader(inputFile, inputStat.Size())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// create output file
 	outputFile, err := os.Create(outputFname)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// get meta information from input
@@ -58,88 +42,72 @@ func NewMonoFIRFromFile(binPath string, scaler int, coeffs []int, inputFname, ou
 	// create output with the same characteristics
 	output, err := meta.NewWriter(outputFile)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// create a MonoFIR based in these files
-	sim, err := NewMonoFIR(binPath, scaler, coeffs, input, output)
-	if err != nil {
-		return nil, err
-	}
-
-	return sim, nil
+	return NewMonoFIR(binPath, scaler, coeffs, input, output)
 }
 
-func NewMonoFIR(binPath string, scaler int, coeffs []int, input *wav.WavReader, output *wav.WavWriter) (w *MonoFIR, err error) {
-	w = &MonoFIR{
-		input:  input,
-		output: output,
-	}
-
-	w.samplesTotal = input.GetSampleCount()
+func NewMonoFIR(binPath string, scaler int, coeffs []int, input *wav.WavReader, output *wav.WavWriter) error {
+	var err error
 
 	// construct arguments
 	args := make([]string, len(coeffs)+2)
-	args[0] = strconv.Itoa(int(w.samplesTotal))
+	args[0] = fmt.Sprintf("%d", input.GetSampleCount())
 	args[1] = strconv.Itoa(scaler)
 	for i, c := range coeffs {
 		args[i+2] = strconv.Itoa(c)
 	}
 
-	w.cmd = exec.Command(binPath, args...)
+	cmd := exec.Command(binPath, args...)
 
-	w.cmd.Stderr = &w.stderr
-	w.stdin, err = w.cmd.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-
-	w.stdout, err = w.cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-
-	return w, nil
-}
-
-// starts executing the Simulation
-func (w MonoFIR) Run() (err error) {
-
-	in, err := w.input.GetDumbReader()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
 	}
 
-	out, writtenPtr, err := w.output.GetDumbWriter()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
-	*writtenPtr = int32(w.samplesTotal)
 
-	if err := w.cmd.Start(); err != nil {
+	in, err := input.GetDumbReader()
+	if err != nil {
+		return err
+	}
+
+	out, writtenPtr, err := output.GetDumbWriter()
+	if err != nil {
+		return err
+	}
+	*writtenPtr = int32(input.GetSampleCount())
+
+	if err := cmd.Start(); err != nil {
 		return err
 	}
 
 	rc := make(chan copyJob)
 	wc := make(chan copyJob)
-	go copyPump(rc, in, w.stdin)
-	go copyPump(wc, w.stdout, out)
-
-	wjob := <-wc
-	if wjob.Err != nil {
-		return fmt.Errorf("outCopy failed: %q", wjob.Err)
-	}
+	go copyPump(rc, in, stdin)
+	go copyPump(wc, stdout, out)
 
 	rjob := <-rc
 	if rjob.Err != nil {
 		return fmt.Errorf("inCopy failed: %q", rjob.Err)
 	}
 
-	if err = w.cmd.Wait(); err != nil {
+	wjob := <-wc
+	if wjob.Err != nil {
+		return fmt.Errorf("outCopy failed: %q", wjob.Err)
+	}
+
+	if err = cmd.Wait(); err != nil {
 		return err
 	}
 
-	if s := w.stderr.String(); s != "" {
+	if s := stderr.String(); s != "" {
 		return fmt.Errorf("Stderr not empty: %q", s)
 	}
 
