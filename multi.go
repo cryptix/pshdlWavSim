@@ -22,7 +22,7 @@ func NewMultiFromFile(binPath string, inAfname, inBfname, outputFname string) er
 		return err
 	}
 
-	wavA, err := wav.NewWavReader(fileA, statA.Size())
+	wavA, err := wav.NewReader(fileA, statA.Size())
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func NewMultiFromFile(binPath string, inAfname, inBfname, outputFname string) er
 		return err
 	}
 
-	wavB, err := wav.NewWavReader(fileB, statB.Size())
+	wavB, err := wav.NewReader(fileB, statB.Size())
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func NewMultiFromFile(binPath string, inAfname, inBfname, outputFname string) er
 	}
 
 	// get meta information from input
-	meta := wavA.GetWavFile()
+	meta := wavA.GetFile()
 
 	// create output with the same characteristics
 	output, err := meta.NewWriter(outputFile)
@@ -74,7 +74,7 @@ func NewMultiFromFile(binPath string, inAfname, inBfname, outputFname string) er
 	return NewMulti(binPath, int(wavA.GetSampleCount()), files, output)
 }
 
-func NewMulti(binPath string, samplesTotal int, files []*os.File, output *wav.WavWriter) error {
+func NewMulti(binPath string, samplesTotal int, files []*os.File, output *wav.Writer) error {
 
 	cmd := exec.Command(binPath, strconv.Itoa(samplesTotal))
 	cmd.ExtraFiles = files

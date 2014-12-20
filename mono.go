@@ -25,7 +25,7 @@ func NewMonoFIRFromFile(binPath string, scaler int, coeffs []int, inputFname, ou
 	}
 
 	// create wav.Reader
-	input, err := wav.NewWavReader(inputFile, inputStat.Size())
+	input, err := wav.NewReader(inputFile, inputStat.Size())
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func NewMonoFIRFromFile(binPath string, scaler int, coeffs []int, inputFname, ou
 	}
 
 	// get meta information from input
-	meta := input.GetWavFile()
+	meta := input.GetFile()
 
 	// create output with the same characteristics
 	output, err := meta.NewWriter(outputFile)
@@ -48,7 +48,7 @@ func NewMonoFIRFromFile(binPath string, scaler int, coeffs []int, inputFname, ou
 	return NewMonoFIR(binPath, scaler, coeffs, input, output)
 }
 
-func NewMonoFIR(binPath string, scaler int, coeffs []int, input *wav.WavReader, output *wav.WavWriter) error {
+func NewMonoFIR(binPath string, scaler int, coeffs []int, input *wav.Reader, output *wav.Writer) error {
 	var err error
 
 	// construct arguments
