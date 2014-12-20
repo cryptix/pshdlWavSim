@@ -83,8 +83,6 @@ func NewMultiFromFile(binPath string, inAfname, inBfname, outputFname string) (*
 		return nil, err
 	}
 
-	// // store file handles for closing after sim
-
 	return sim, nil
 }
 
@@ -113,7 +111,7 @@ func (m Multi) Run() (err error) {
 	}
 
 	if len(out) != 0 {
-		return fmt.Errorf("Sim output: %q", string(out))
+		return fmt.Errorf("Error sim output: %q", string(out))
 	}
 
 	*wPtr = int32(m.samplesTotal)

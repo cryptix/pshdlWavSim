@@ -25,8 +25,6 @@ type MonoFIR struct {
 
 	bytesWritten, bytesRead int64
 	writtenSamplesPtr       *int32
-
-	iFile, oFile *os.File
 }
 
 func NewMonoFIRFromFile(binPath string, scaler int, coeffs []int, inputFname, outputFname string) (w *MonoFIR, err error) {
@@ -68,10 +66,6 @@ func NewMonoFIRFromFile(binPath string, scaler int, coeffs []int, inputFname, ou
 	if err != nil {
 		return nil, err
 	}
-
-	// store file handles for closing after sim
-	sim.iFile = inputFile
-	sim.oFile = outputFile
 
 	return sim, nil
 }
@@ -120,6 +114,7 @@ func (w MonoFIR) Run() (err error) {
 	if err != nil {
 		return err
 	}
+	*writtenPtr = int32(w.samplesTotal)
 
 	if err := w.cmd.Start(); err != nil {
 		return err
@@ -128,7 +123,7 @@ func (w MonoFIR) Run() (err error) {
 	rc := make(chan copyJob)
 	wc := make(chan copyJob)
 	go copyPump(rc, in, w.stdin)
-	go copyPump(wc, w.stdout, nopCloseWriter{out})
+	go copyPump(wc, w.stdout, out)
 
 	wjob := <-wc
 	if wjob.Err != nil {
@@ -150,24 +145,6 @@ func (w MonoFIR) Run() (err error) {
 
 	if wjob.N != rjob.N {
 		return fmt.Errorf("i/o missmatch - r[%d] w[%d]", rjob.N, wjob.N)
-	}
-
-	*writtenPtr = int32(w.samplesTotal)
-	err = w.output.Close()
-	if err != nil {
-		return err
-	}
-
-	if w.iFile != nil {
-		if err := w.iFile.Close(); err != nil {
-			return err
-		}
-	}
-
-	if w.oFile != nil {
-		if err := w.oFile.Close(); err != nil {
-			return err
-		}
 	}
 
 	return nil
