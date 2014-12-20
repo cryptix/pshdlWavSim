@@ -108,7 +108,7 @@ func NewMonoFIR(binPath string, scaler int, coeffs []int, input *wav.Reader, out
 	}
 
 	if s := stderr.String(); s != "" {
-		return fmt.Errorf("Stderr not empty: %q", s)
+		fmt.Fprintf(os.Stderr, "sim.stderr output: %q\n", s)
 	}
 
 	if wjob.N != rjob.N {

@@ -90,7 +90,7 @@ func NewMulti(binPath string, samplesTotal int, files []*os.File, output *wav.Wr
 	}
 
 	if len(cmtOut) != 0 {
-		return fmt.Errorf("Error sim output: %q", string(cmtOut))
+		fmt.Fprintf(os.Stderr, "sim.stderr output: %q\n", string(cmtOut))
 	}
 
 	*wPtr = int32(samplesTotal)
