@@ -1,6 +1,7 @@
 package pshdlWavSim
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,96 +11,94 @@ import (
 )
 
 // NewMultiFromFile does the preperation and then calls NewMulti
-func NewMultiFromFile(binPath string, inAfname, inBfname, outputFname string) error {
-	// open first input file
-	fileA, err := os.Open(inAfname)
-	if err != nil {
-		return err
+func NewMultiFromFile(binPath string, inputFnames, outputFnames []string) error {
+	var iwav *wav.Reader
+
+	if len(inputFnames) < 1 || len(outputFnames) < 1 {
+		return errors.New("need at least one input and output filename")
 	}
 
-	statA, err := fileA.Stat()
-	if err != nil {
-		return err
+	files := make([]*os.File, len(inputFnames))
+	// prepare input files
+	for i, iname := range inputFnames {
+
+		f, err := os.Open(iname)
+		if err != nil {
+			return err
+		}
+
+		s, err := f.Stat()
+		if err != nil {
+			return err
+		}
+
+		iwav, err = wav.NewReader(f, s.Size())
+		if err != nil {
+			return err
+		}
+
+		_, err = f.Seek(int64(iwav.FirstSampleOffset()), os.SEEK_SET)
+		if err != nil {
+			return err
+		}
+
+		files[i] = f
 	}
 
-	wavA, err := wav.NewReader(fileA, statA.Size())
-	if err != nil {
-		return err
+	// prepare output files
+	outputWriters := make([]*wav.Writer, len(outputFnames))
+	for i, oname := range outputFnames {
+		// create output file
+		f, err := os.Create(oname)
+		if err != nil {
+			return err
+		}
+
+		// get meta information from input
+		// BUG(Henry): check that all wav files have the same characteristics
+		meta := iwav.GetFile()
+
+		// create output with the same characteristics
+		outputWriters[i], err = meta.NewWriter(f)
+		if err != nil {
+			return err
+		}
+
+		files = append(files, f)
 	}
 
-	_, err = fileA.Seek(int64(wavA.FirstSampleOffset()), os.SEEK_SET)
-	if err != nil {
-		return err
-	}
-
-	// open 2nd input file
-	fileB, err := os.Open(inBfname)
-	if err != nil {
-		return err
-	}
-
-	statB, err := fileB.Stat()
-	if err != nil {
-		return err
-	}
-
-	wavB, err := wav.NewReader(fileB, statB.Size())
-	if err != nil {
-		return err
-	}
-
-	_, err = fileB.Seek(int64(wavB.FirstSampleOffset()), os.SEEK_SET)
-	if err != nil {
-		return err
-	}
-
-	// create output file
-	outputFile, err := os.Create(outputFname)
-	if err != nil {
-		return err
-	}
-
-	// get meta information from input
-	meta := wavA.GetFile()
-
-	// create output with the same characteristics
-	output, err := meta.NewWriter(outputFile)
-	if err != nil {
-		return err
-	}
-
-	// create a MonoFIR based in these files
-	files := []*os.File{fileA, fileB, outputFile}
-
-	return NewMulti(binPath, int(wavA.GetSampleCount()), files, output)
+	// BUG(Henry): check that all wav files have the same length
+	return NewMulti(binPath, int(iwav.GetSampleCount()), files, outputWriters)
 }
 
-func NewMulti(binPath string, samplesTotal int, files []*os.File, output *wav.Writer) error {
+func NewMulti(binPath string, samplesTotal int, files []*os.File, wr []*wav.Writer) error {
 
 	cmd := exec.Command(binPath, strconv.Itoa(samplesTotal))
 	cmd.ExtraFiles = files
 
-	_, wPtr, err := output.GetDumbWriter()
+	cmdOut, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("output.GetDumbWriter() Err:%q", err)
+		return fmt.Errorf("cmd.CombinedOutput() Err:%q\nOutput:%q", err, cmdOut)
 	}
 
-	cmtOut, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("cmd.CombinedOutput() Err:%q", err)
+	if len(cmdOut) != 0 {
+		fmt.Fprintf(os.Stderr, "sim.stderr output: %q\n", string(cmdOut))
 	}
 
-	if len(cmtOut) != 0 {
-		fmt.Fprintf(os.Stderr, "sim.stderr output: %q\n", string(cmtOut))
+	for _, w := range wr {
+		_, wPtr, err := w.GetDumbWriter()
+		if err != nil {
+			return fmt.Errorf("output.GetDumbWriter() Err:%q", err)
+		}
+
+		*wPtr = int32(samplesTotal)
+
+		if err = w.Close(); err != nil {
+			return err
+		}
 	}
 
-	*wPtr = int32(samplesTotal)
-	err = output.Close()
-	if err != nil {
-		return err
-	}
-
-	for _, f := range files[:1] { // dont close outputFile
+	for _, f := range files[:len(files)-len(wr)] { // dont close outputWriters
 		if err := f.Close(); err != nil {
 			return err
 		}
