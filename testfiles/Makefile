@@ -1,13 +1,15 @@
 CC=clang
 
-all: monopassthrough naiveMixDown
+all: filterReader monopassthrough naiveMixDown
 
 monopassthrough: monopassthrough.c
-	$(CC) -o $@ monopassthrough.c
+	$(CC) -o $@ $<
 
 naiveMixDown: naiveMixDown.c
-	$(CC) -o $@ naiveMixDown.c
+	$(CC) -o $@ $<
 
+filterReader: filterReader.c
+	$(CC) -o $@ $<
 
 clean:
 	rm naiveMixDown
